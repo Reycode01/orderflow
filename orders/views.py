@@ -14,9 +14,9 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if user.role == 'kitchen':
+        if hasattr(user, 'role') and user.role == 'kitchen':
             return Order.objects.all()
-        elif user.role == 'waitstaff':
+        elif hasattr(user, 'role') and user.role == 'waitstaff':
             return Order.objects.filter(created_by=user)
         return Order.objects.all()
 
@@ -24,15 +24,20 @@ class OrderViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
     def get_permissions(self):
+        user = self.request.user
+
+        if not user.is_authenticated:
+            return [IsAuthenticated()]  # Will return 401 if not logged in
+
         if self.action == 'create':
             return [IsAuthenticated(), IsWaitstaff()]
         elif self.action in ['list', 'retrieve']:
-            user = self.request.user
-            if user.role == 'kitchen' or user.is_staff:
+            if hasattr(user, 'role') and (user.role == 'kitchen' or user.is_staff):
                 return [IsAuthenticated()]
-            return [IsAuthenticated()]  # fallback
+            return [IsAuthenticated()]
         elif self.action in ['update', 'partial_update', 'destroy']:
             return [IsAuthenticated(), IsAdminUser()]
+
         return [IsAuthenticated()]
 
 
