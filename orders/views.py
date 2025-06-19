@@ -7,10 +7,10 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from .permissions import IsWaitstaff, IsKitchenStaff, IsAdminUser
 
+
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.all().order_by('-timestamp')
     serializer_class = OrderSerializer
-    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
@@ -22,27 +22,32 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
-        
+
     def get_permissions(self):
-        if self.action in ['create']:
+        if self.action == 'create':
             return [IsAuthenticated(), IsWaitstaff()]
         elif self.action in ['list', 'retrieve']:
-            return [IsAuthenticated(), IsKitchenStaff() | IsAdminUser()]
+            user = self.request.user
+            if user.role == 'kitchen' or user.is_staff:
+                return [IsAuthenticated()]
+            return [IsAuthenticated()]  # fallback
         elif self.action in ['update', 'partial_update', 'destroy']:
             return [IsAuthenticated(), IsAdminUser()]
         return [IsAuthenticated()]
 
+
 class TableViewSet(viewsets.ModelViewSet):
     queryset = Table.objects.all()
     serializer_class = TableSerializer
-    
-    
+
+
 @api_view(['GET'])
 def qr_confirmation(request, qr_code):
     try:
         table = Table.objects.get(qr_code=qr_code)
-        # Get latest unserved order for that table
-        order = table.orders.filter(status__in=['pending', 'preparing', 'served', 'delayed']).latest('timestamp')
+        order = table.orders.filter(
+            status__in=['pending', 'preparing', 'served', 'delayed']
+        ).latest('timestamp')
         serializer = OrderSerializer(order)
         return Response({
             "table": table.number,
